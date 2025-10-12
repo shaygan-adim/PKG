@@ -1,0 +1,119 @@
+databases:
+  neo4j:
+    uri: "bolt://neo4j:7687"
+    user: "neo4j"
+    # This password must match the one set in docker-compose.yaml
+    password: "your_strong_password_here"
+  chromadb:
+    # The path inside the Docker container where ChromaDB data is stored.
+    path: "/usr/src/app/data/chroma"
+    collection_name: "knowledge_embeddings"
+  sqlite:
+    # The path inside the Docker container where the log database is stored.
+    path: "/usr/src/app/data/logs.db"
+
+llm:
+  # Defines the model to be used for all agent calls.
+  model_name: "gemini-1.5-flash-latest"
+  # Parameters for the Gemini API calls
+  generation_config:
+    temperature: 0.5
+    top_p: 1
+    top_k: 1
+    max_output_tokens: 8192
+
+prompts:
+  # Prompt for the Extractor Agent to structure raw text.
+  extractor: |
+    You are an expert knowledge architect. Your task is to analyze the following text and structure it into a machine-readable JSON format.
+    You must identify a concise summary, a suitable node_type, and a hierarchical tag_path based on the provided tag hierarchy.
+
+    **Instructions:**
+    1.  **Summarize:** Create a dense, one-sentence summary of the core idea in the text.
+    2.  **Categorize:** Choose the most fitting `node_type` from this list: ['Concept', 'Idea', 'Fact', 'Question', 'Lesson'].
+    3.  **Tag:** Select the most relevant `tag_path` from the provided hierarchy. The path must be a list of strings from the most general to the most specific tag. If no suitable tag exists, you are allowed to create a new, logical one that fits within the existing structure.
+
+    **Tag Hierarchy for Reference:**
+    ```yaml
+    {tag_hierarchy}
+    ```
+
+    **Text to Analyze:**
+    "{user_text}"
+
+    **Output Format (JSON only):**
+    Provide your response as a single, valid JSON object. Do not include any explanatory text before or after the JSON.
+    Example:
+    {{
+      "content_summary": "A brief summary of the text.",
+      "node_type": "Concept",
+      "tag_path": ["Category", "Sub-Category", "Specific-Tag"]
+    }}
+
+  # Prompt for the Knowledge Linker Agent to find relationships.
+  linker: |
+    You are a knowledge synthesis expert. Your goal is to identify meaningful connections between a new piece of knowledge and existing knowledge nodes.
+    Analyze the new node and the list of candidate nodes. For each candidate that has a clear relationship, define that connection.
+
+    **Instructions:**
+    1.  Review the `new_node_summary`.
+    2.  For each `candidate_node`, determine if a relationship exists.
+    3.  If a relationship is found, describe it using a `type` from the list: ['explains', 'contradicts', 'builds_on', 'related_to', 'is_an_example_of'].
+    4.  Write a one-sentence `description` explaining *why* they are connected.
+    5.  Format your output as a JSON list of relationship objects. If no relationships are found, return an empty list `[]`.
+
+    **New Knowledge Node:**
+    - ID: `{new_node_id}`
+    - Summary: `{new_node_summary}`
+
+    **Candidate Knowledge Nodes for Linking:**
+    ```json
+    {candidate_nodes}
+    ```
+
+    **Output Format (JSON list only):**
+    [
+      {{
+        "to_node_id": "candidate_node_id_1",
+        "type": "builds_on",
+        "description": "This concept directly expands on the foundational idea presented in the candidate node."
+      }}
+    ]
+
+  # Prompt for the Query Analyzer Agent to deconstruct a user's question.
+  query_analyzer: |
+    You are a search query optimization specialist. Your task is to deconstruct a user's natural language question into a structured JSON object for a hybrid search system.
+
+    **Instructions:**
+    1.  **Rephrase for Semantics:** Create a `semantic_query`. This should be a rephrased version of the user's question, optimized for vector-based similarity search. It should capture the core *intent* and *meaning* of the question.
+    2.  **Extract for Traversal:** Identify key `graph_tags`. These are specific nouns or concepts from the question that likely correspond to tags in a knowledge graph. Extract up to 3 of the most relevant tags.
+
+    **User's Question:**
+    "{user_question}"
+
+    **Output Format (JSON only):**
+    {{
+      "semantic_query": "A rephrased, meaning-focused version of the question.",
+      "graph_tags": ["tag1", "tag2"]
+    }}
+
+  # Prompt for the Synthesizer Agent to generate a final answer.
+  synthesizer: |
+    You are a personal knowledge assistant. Your purpose is to answer a user's question by synthesizing information from a provided set of knowledge nodes.
+
+    **Instructions:**
+    1.  Carefully review the `user_question`.
+    2.  Read through the `knowledge_context`, which contains excerpts from the user's personal knowledge graph.
+    3.  Formulate a comprehensive, coherent answer to the question.
+    4.  **Crucially, you must base your answer *only* on the information given in the context.** Do not use any external knowledge.
+    5.  At the end of your answer, cite the sources you used by listing their `node_id`s under a "Sources:" heading.
+
+    **User's Question:**
+    "{user_question}"
+
+    **Knowledge Context:**
+    ```json
+    {context}
+    ```
+
+    **Your Answer (Markdown Format):**

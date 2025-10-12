@@ -1,0 +1,8 @@
+streamlit
+pyyaml
+neo4j
+chromadb
+google-generativeai
+streamlit-agraph # For interactive graph visualization
+pandas
+PySocks # Added for SOCKS proxy support

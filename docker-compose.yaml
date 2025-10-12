@@ -1,0 +1,54 @@
+services:
+  # The main Python application service running Streamlit
+  app:
+    build:
+      context: ./app
+    container_name: kai_app
+    ports:
+      - "8501:8501" # Exposes the Streamlit UI port
+    volumes:
+      # Mounts the app code into the container for live updates
+      - ./app:/usr/src/app
+      # Persists the ChromaDB and SQLite data on the host machine
+      - ./app/data:/usr/src/app/data
+      # Mounts the config files
+      - ./config.yaml:/usr/src/app/config.yaml
+      - ./tags.yaml:/usr/src/app/tags.yaml
+    network_mode: host
+    environment:
+      # Passes the API key from the .env file to the container
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      
+      # --- PROXY CONFIGURATION (Using Docker Host) ---
+      # 'host.docker.internal' is a special DNS name that resolves to the host machine's IP.
+      - HTTP_PROXY=host.docker.internal:10808
+      - HTTPS_PROXY=host.docker.internal:10808
+      - http_proxy=host.docker.internal:10808
+      - https_proxy=host.docker.internal:10808
+      # - ALL_PROXY="socks5://host.docker.internal:10808"
+      # - HTTP_PROXY=socks5://127.0.0.1:10808
+      # - HTTPS_PROXY=socks5://127.0.0.1:10808
+      # Prevents proxying for internal container communication
+      - NO_PROXY=localhost,127.0.0.1,kai_neo4j,neo4j
+
+    depends_on:
+      # Ensures Neo4j is started before the app tries to connect
+      - neo4j
+    command: streamlit run app.py --server.runOnSave true
+
+  # The Neo4j graph database service
+  neo4j:
+    image: neo4j:5.18
+    container_name: kai_neo4j
+    ports:
+      - "7474:7474" # Neo4j Browser UI
+      - "7687:7687" # Bolt protocol for the Python driver
+    volumes:
+      # Persists the Neo4j graph data on the host machine
+      - neo4j_data:/data
+    environment:
+      # Sets the authentication for Neo4j.
+      - NEO4J_AUTH=neo4j/your_strong_password_here
+
+volumes:
+  neo4j_data:
